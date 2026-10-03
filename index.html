@@ -115,7 +115,21 @@ details summary{cursor:pointer;font-weight:600;min-height:32px}
 
   <div class="card">
     <div class="lbl">Bus EMT y Metro</div>
-    <div class="meta" style="margin-bottom:6px">Aún sin datos automáticos de la EMT. Si miras Google Maps, indica aquí lo que ves y la recomendación lo tendrá en cuenta.</div>
+    <div id="emtInfo" style="margin-bottom:8px"></div>
+    <details id="emtCfg" style="margin-bottom:8px">
+      <summary>⚙ Claves de la EMT</summary>
+      <div class="meta" style="margin:6px 0">Se guardan solo en este teléfono. Las pegas una vez.</div>
+      <div class="lbl">Client ID</div>
+      <input id="cfgId" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="lbl" style="margin-top:8px">passKey</div>
+      <input id="cfgKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="row" style="margin-top:8px">
+        <button id="cfgSave" class="primary" type="button" style="flex:1">Guardar y probar</button>
+        <button id="cfgClear" type="button">Borrar</button>
+      </div>
+    </details>
+    <div id="manualBus">
+    <div class="meta" style="margin-bottom:6px">Sin datos automáticos de la EMT: indica lo que ves en Google Maps y la recomendación lo tendrá en cuenta.</div>
     <div class="lbl">¿Hay bus directo?</div>
     <div class="seg" id="segDirect">
       <label><input type="radio" name="direct" value="" checked>Sin dato</label>
@@ -125,6 +139,7 @@ details summary{cursor:pointer;font-weight:600;min-height:32px}
     <div id="waitBox" hidden>
       <div class="lbl">Espera en la parada (min)</div>
       <input id="wait" type="number" inputmode="numeric" min="0" max="60" value="5">
+    </div>
     </div>
     <div class="lbl" style="margin-top:8px">Metro</div>
     <div class="seg">
@@ -146,6 +161,7 @@ details summary{cursor:pointer;font-weight:600;min-height:32px}
   </details>
 </main>
 <script src="logic.js"></script>
+<script src="emt.js"></script>
 <script>
 (function(){
   var L = window.Logic;
@@ -199,10 +215,28 @@ details summary{cursor:pointer;font-weight:600;min-height:32px}
     }).then(function(fails){
       var f = (fails||[]).filter(Boolean);
       if(f.length) $('err').textContent = (($('err').textContent?$('err').textContent+' ':'')) + 'No se pudo leer: ' + f.join(' y ') + '.';
-      st.at = new Date();
-      render();
+      return readEmt().then(function(){ st.at = new Date(); render(); });
     }).catch(function(e){ $('err').textContent = 'Error: ' + e.message; })
       .then(function(){ $('btnRefresh').disabled = false; $('btnRefresh').textContent = 'Actualizar'; });
+  }
+
+  function emtCfg(){ var c = load('emt', null); return c && c.clientId && c.passKey ? c : null; }
+  function readEmt(){
+    var cfg = emtCfg();
+    if(!cfg){ st.emt = { state:'off' }; return Promise.resolve(); }
+    var d = dest();
+    return Promise.all([ window.Emt.stopsNear(cfg, st.origin.lat, st.origin.lon, 500), window.Emt.stopsNear(cfg, d.lat, d.lon, 400) ]).then(function(r){
+      var o = r[0].map(function(x){ x.metros = Math.round(L.haversine(st.origin.lat, st.origin.lon, x.lat, x.lon)); return x; })
+        .sort(function(a,b){ return a.metros - b.metros; }).slice(0,3);
+      var set = {}; r[1].forEach(function(x){ x.lines.forEach(function(l){ set[l] = 1; }); });
+      var destLines = Object.keys(set);
+      if(!o.length) throw new Error('No hay paradas EMT cerca de tu posición');
+      if(!destLines.length) throw new Error('La EMT no devolvió líneas para las paradas del destino');
+      return Promise.all(o.map(function(x){ return window.Emt.arrivals(cfg, x.id).then(function(a){ return [x.id, a]; }); })).then(function(pairs){
+        var by = {}; pairs.forEach(function(p){ by[p[0]] = p[1]; });
+        st.emt = { state:'ok', pick: window.Emt.pickBus(o, by, destLines, L.walkMin), origin:o, destLines:destLines };
+      });
+    }).catch(function(e){ st.emt = { state:'err', msg:e.message }; });
   }
 
   function lvl(n){ return L.bikeLevel(n); }
@@ -234,7 +268,20 @@ details summary{cursor:pointer;font-weight:600;min-height:32px}
 
     var direct = document.querySelector('input[name=direct]:checked').value;
     direct = direct === '' ? null : direct === '1';
-    $('waitBox').hidden = direct !== true;
+    var emt = st.emt && st.emt.state === 'ok' ? st.emt.pick : null, emtWait = null;
+    $('manualBus').hidden = !!emt;
+    var inf = $('emtInfo');
+    if(emt){
+      direct = emt.direct; emtWait = emt.best ? emt.best.wait : null;
+      inf.className = '';
+      inf.innerHTML = emt.best
+        ? '<div class="n">Bus ' + esc(emt.best.line) + ' · sale en ' + emt.best.wait + ' min</div><div class="meta">Parada ' + esc(emt.best.stop) + ', a ' + emt.best.walk + ' min andando · destino ' + esc(emt.best.destination) + '</div>'
+        : (emt.direct ? '<div class="n warn">Hay directo (' + esc(emt.lines.join(', ')) + '), pero no llegas a coger el próximo</div>'
+                      : '<div class="n bad">Sin bus directo</div><div class="meta">Líneas del destino: ' + esc(st.emt.destLines.join(', ')) + '</div>');
+    } else if(st.emt && st.emt.state === 'err'){
+      inf.innerHTML = '<div class="err">EMT: ' + esc(st.emt.msg) + '</div>';
+    } else inf.textContent = '';
+    $('waitBox').hidden = emt ? true : direct !== true;
     var metroIssue = document.querySelector('input[name=metro]:checked').value === '1';
 
     if(rain == null || !near){
@@ -248,7 +295,7 @@ details summary{cursor:pointer;font-weight:600;min-height:32px}
         bikes: near.map(function(s){ return s.bicis; }),
         names: near.map(function(s){ return s.nombre; }),
         docks: Math.max.apply(null, dk.map(function(s){ return s.libres; })),
-        direct: direct, wait: direct ? (+$('wait').value || 0) : null, metroIssue: metroIssue
+        direct: direct, wait: emt ? emtWait : (direct ? (+$('wait').value || 0) : null), metroIssue: metroIssue
       });
       var names = { bici:'BiciMAD', bus:'Bus EMT', metro:'Metro' };
       $('verdict').dataset.mode = r.mode;
@@ -278,6 +325,18 @@ details summary{cursor:pointer;font-weight:600;min-height:32px}
   $('addGo').addEventListener('click', addGo);
   $('addQ').addEventListener('keydown', function(e){ if(e.key==='Enter') addGo(); });
 
+  var c0 = load('emt', null);
+  if(c0){ $('cfgId').value = c0.clientId || ''; $('cfgKey').value = c0.passKey || ''; }
+  $('cfgSave').addEventListener('click', function(){
+    var id = $('cfgId').value.trim(), key = $('cfgKey').value.trim();
+    if(!id || !key){ $('emtInfo').innerHTML = '<div class="err">Faltan el Client ID o la passKey.</div>'; return; }
+    save('emt', { clientId:id, passKey:key });
+    $('emtCfg').open = false; refresh(false);
+  });
+  $('cfgClear').addEventListener('click', function(){
+    try { localStorage.removeItem('emt'); } catch(e){}
+    $('cfgId').value = ''; $('cfgKey').value = ''; st.emt = { state:'off' }; render();
+  });
   $('btnGps').addEventListener('click', function(){ refresh(true); });
   $('btnRefresh').addEventListener('click', function(){ refresh(true); });
   document.querySelectorAll('input[name=direct],input[name=metro],#wait').forEach(function(el){ el.addEventListener('input', render); el.addEventListener('change', render); });

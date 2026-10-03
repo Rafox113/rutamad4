@@ -1,6 +1,6 @@
 /* Solo cachea la carcasa de la app; los datos en vivo siempre van a la red. */
-var CACHE = 'ruta-madrid-v1';
-var SHELL = ['./', 'index.html', 'logic.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-180.png'];
+var CACHE = 'ruta-madrid-v2';
+var SHELL = ['./', 'index.html', 'logic.js', 'emt.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-180.png'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));
 });
