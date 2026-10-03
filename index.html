@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ruta Madrid</title>
+<meta name="theme-color" content="#0f766e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ruta Madrid">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f5f4ef; --card:#fff; --ink:#1b1f1e; --mute:#5d6663; --line:#dcdad2;
+  --good:#0f766e; --warn:#b45309; --bad:#b91c1c; --unk:#6b7280;
+  --bici:#0f766e; --bus:#1d4ed8; --metro:#b91c1c; --accent:#0f766e;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#121514; --card:#1b201f; --ink:#ecefed; --mute:#9aa5a1; --line:#2c3331;
+  --good:#34d3b8; --warn:#f2a64b; --bad:#f08080; --unk:#9ca3af;
+  --bici:#34d3b8; --bus:#7aa7ff; --metro:#f08080; --accent:#34d3b8;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding:max(12px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom))}
+main{max-width:560px;margin:0 auto}
+h1{font-size:1.05rem;margin:4px 0 12px;font-weight:700;letter-spacing:.01em}
+.row{display:flex;gap:8px;align-items:center}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+.lbl{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin-bottom:4px}
+select,input[type=text],input[type=number]{width:100%;font:inherit;color:var(--ink);background:var(--bg);
+  border:1px solid var(--line);border-radius:10px;padding:10px}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;
+  padding:10px 14px;cursor:pointer;min-height:44px}
+button.primary{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+@media (prefers-color-scheme:dark){button.primary{color:#06201b}}
+button:disabled{opacity:.6}
+.verdict{border-width:2px;position:sticky;top:6px;z-index:2}
+.verdict .mode{font-size:2rem;font-weight:800;line-height:1.1}
+.verdict .why{margin:6px 0 0}
+.verdict .b{margin-top:8px;color:var(--mute);font-size:.9rem}
+.verdict[data-mode=bici]{border-color:var(--bici)} .verdict[data-mode=bici] .mode{color:var(--bici)}
+.verdict[data-mode=bus]{border-color:var(--bus)} .verdict[data-mode=bus] .mode{color:var(--bus)}
+.verdict[data-mode=metro]{border-color:var(--metro)} .verdict[data-mode=metro] .mode{color:var(--metro)}
+.pill{display:inline-block;font-size:.8rem;font-weight:600;border-radius:99px;padding:2px 10px;border:1px solid currentColor}
+.good{color:var(--good)} .warn{color:var(--warn)} .bad{color:var(--bad)} .unk{color:var(--unk)}
+.st{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
+.st:first-of-type{border-top:0}
+.st .n{font-weight:600}.st .d{color:var(--mute);font-size:.85rem}
+.big{font-variant-numeric:tabular-nums;font-weight:700;font-size:1.2rem;white-space:nowrap}
+.meta{color:var(--mute);font-size:.85rem}
+.links{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+a.btn{display:inline-block;text-decoration:none;color:var(--ink);border:1px solid var(--line);
+  border-radius:10px;padding:10px 14px;min-height:44px;background:var(--card)}
+.err{color:var(--bad);font-size:.9rem}
+details summary{cursor:pointer;font-weight:600;min-height:32px}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.seg label{flex:1;min-width:90px;text-align:center;border:1px solid var(--line);border-radius:10px;padding:10px 6px;cursor:pointer}
+.seg input{position:absolute;opacity:0}
+.seg label:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);font-weight:600}
+</style>
+</head>
+<body>
+<main>
+  <h1>Ruta Madrid</h1>
+
+  <div class="card">
+    <div class="lbl">Salgo de</div>
+    <div class="row">
+      <div id="origen" style="flex:1;font-weight:600">Buscando ubicación…</div>
+      <button id="btnGps" type="button">📍 GPS</button>
+    </div>
+    <div class="lbl" style="margin-top:12px">Voy a</div>
+    <div class="row">
+      <select id="dest" aria-label="Destino"></select>
+      <button id="btnAdd" type="button" aria-label="Añadir destino">＋</button>
+    </div>
+    <div id="addBox" hidden style="margin-top:8px">
+      <div class="row">
+        <input id="addQ" type="text" placeholder="Calle y número, Madrid" enterkeyhint="search">
+        <button id="addGo" type="button" class="primary">Buscar</button>
+      </div>
+      <div id="addMsg" class="meta" style="margin-top:6px"></div>
+    </div>
+  </div>
+
+  <div class="card verdict" id="verdict" data-mode="">
+    <div class="lbl">Recomendación</div>
+    <div class="mode" id="vMode">—</div>
+    <p class="why" id="vWhy">Pulsa Actualizar.</p>
+    <div class="b" id="vB"></div>
+  </div>
+
+  <div class="row">
+    <button id="btnRefresh" class="primary" style="flex:1" type="button">Actualizar</button>
+  </div>
+  <div class="meta" id="fresh" style="margin:6px 2px"></div>
+  <div class="err" id="err"></div>
+
+  <div class="card">
+    <div class="lbl">Clima</div>
+    <div id="clima" class="n">—</div>
+  </div>
+
+  <div class="card">
+    <div class="lbl">BiciMAD · bicis en las 3 paradas más cercanas</div>
+    <div id="bicis"></div>
+    <div class="lbl" style="margin-top:10px">Anclajes libres cerca del destino</div>
+    <div id="docks"></div>
+    <div class="meta" id="bikeEta" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card">
+    <div class="lbl">Bus EMT y Metro</div>
+    <div class="meta" style="margin-bottom:6px">Aún sin datos automáticos de la EMT. Si miras Google Maps, indica aquí lo que ves y la recomendación lo tendrá en cuenta.</div>
+    <div class="lbl">¿Hay bus directo?</div>
+    <div class="seg" id="segDirect">
+      <label><input type="radio" name="direct" value="" checked>Sin dato</label>
+      <label><input type="radio" name="direct" value="1">Sí</label>
+      <label><input type="radio" name="direct" value="0">No</label>
+    </div>
+    <div id="waitBox" hidden>
+      <div class="lbl">Espera en la parada (min)</div>
+      <input id="wait" type="number" inputmode="numeric" min="0" max="60" value="5">
+    </div>
+    <div class="lbl" style="margin-top:8px">Metro</div>
+    <div class="seg">
+      <label><input type="radio" name="metro" value="0" checked>Sin incidencias</label>
+      <label><input type="radio" name="metro" value="1">Con incidencias</label>
+    </div>
+    <div class="links">
+      <a class="btn" id="lnkTransit" target="_blank" rel="noopener">Bus y metro en Google Maps</a>
+      <a class="btn" href="https://www.metromadrid.es/es" target="_blank" rel="noopener">Avisos Metro</a>
+    </div>
+  </div>
+
+  <details class="card">
+    <summary>Cómo decide</summary>
+    <p class="meta">Lluvia → sin bici. Con seco, bici si alguna de las 3 paradas cercanas tiene bicis y hay anclajes libres cerca del destino.
+    Si no, bus directo con espera de hasta 10 min (8 con lluvia). Si no, metro.
+    Llueve si hay precipitación ahora, código de lluvia/tormenta, o probabilidad ≥ 50 % en la próxima hora.
+    Distancias en línea recta; andando 80 m/min, en bici 15 km/h.</p>
+  </details>
+</main>
+<script src="logic.js"></script>
+<script>
+(function(){
+  var L = window.Logic;
+  var DEF_ORIGIN = { name:'Calle de Viriato, 71', lat:40.435795, lon:-3.6953338, gps:false };
+  var DEF_DEST = [{ name:'Calle de La Coruña, 5', lat:40.4556723, lon:-3.7014611 }];
+  var $ = function(id){ return document.getElementById(id); };
+  var st = { origin:DEF_ORIGIN, dests:load('dests', DEF_DEST), sel:+load('sel', 0) || 0, stations:null, weather:null, at:null };
+
+  function load(k, d){ try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } }
+  function save(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+  function dest(){ return st.dests[st.sel] || st.dests[0]; }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  function renderDests(){
+    $('dest').innerHTML = st.dests.map(function(d,i){ return '<option value="'+i+'"'+(i===st.sel?' selected':'')+'>'+esc(d.name)+'</option>'; }).join('');
+  }
+  function renderOrigin(){
+    $('origen').textContent = (st.origin.gps ? '📍 Tu ubicación' : st.origin.name);
+  }
+
+  function getJson(url){
+    var c = new AbortController(), t = setTimeout(function(){ c.abort(); }, 12000);
+    return fetch(url, { signal:c.signal, cache:'no-store' }).then(function(r){
+      clearTimeout(t); if(!r.ok) throw new Error('HTTP '+r.status); return r.json();
+    });
+  }
+
+  function locate(){
+    return new Promise(function(res){
+      if(!navigator.geolocation){ res(false); return; }
+      navigator.geolocation.getCurrentPosition(function(p){
+        st.origin = { name:'Tu ubicación', lat:p.coords.latitude, lon:p.coords.longitude, gps:true };
+        res(true);
+      }, function(){ res(false); }, { enableHighAccuracy:true, timeout:10000, maximumAge:30000 });
+    });
+  }
+
+  function refresh(useGps){
+    $('btnRefresh').disabled = true; $('btnRefresh').textContent = 'Leyendo…'; $('err').textContent = '';
+    var go = useGps ? locate() : Promise.resolve(true);
+    return go.then(function(ok){
+      if(useGps && !ok && !st.origin.gps) $('err').textContent = 'No pude obtener tu GPS. Uso Viriato, 71.';
+      renderOrigin();
+      var d = dest();
+      var wUrl = 'https://api.open-meteo.com/v1/forecast?latitude='+st.origin.lat+'&longitude='+st.origin.lon+
+        '&current=temperature_2m,precipitation,rain,weather_code&hourly=precipitation_probability&forecast_hours=2&timezone=auto';
+      return Promise.all([
+        getJson('https://api.citybik.es/v2/networks/bicimad').then(function(j){ st.stations = j.network.stations; }).catch(function(e){ st.stations = null; return 'BiciMAD'; }),
+        getJson(wUrl).then(function(j){ st.weather = j; }).catch(function(e){ st.weather = null; return 'clima'; })
+      ]);
+    }).then(function(fails){
+      var f = (fails||[]).filter(Boolean);
+      if(f.length) $('err').textContent = (($('err').textContent?$('err').textContent+' ':'')) + 'No se pudo leer: ' + f.join(' y ') + '.';
+      st.at = new Date();
+      render();
+    }).catch(function(e){ $('err').textContent = 'Error: ' + e.message; })
+      .then(function(){ $('btnRefresh').disabled = false; $('btnRefresh').textContent = 'Actualizar'; });
+  }
+
+  function lvl(n){ return L.bikeLevel(n); }
+  function stRow(s, val, unit){
+    return '<div class="st"><div><div class="n">'+esc(s.nombre)+'</div><div class="d">'+s.metros+' m · ~'+L.walkMin(s.metros)+' min andando</div></div>'+
+      '<div class="big '+lvl(val)+'">'+val+' <span class="meta">'+unit+'</span></div></div>';
+  }
+
+  function render(){
+    var d = dest();
+    $('lnkTransit').href = 'https://www.google.com/maps/dir/?api=1&origin='+st.origin.lat+','+st.origin.lon+'&destination='+d.lat+','+d.lon+'&travelmode=transit';
+    var rain = L.isRain(st.weather);
+    if(st.weather){
+      var c = st.weather.current, p0 = st.weather.hourly && st.weather.hourly.precipitation_probability ? st.weather.hourly.precipitation_probability[0] : null;
+      $('clima').innerHTML = (rain ? '<span class="bad">Lluvia</span>' : '<span class="good">Seco</span>') +
+        ' · ' + Math.round(c.temperature_2m) + ' °C' + (p0!=null ? ' · prob. lluvia ' + p0 + ' %' : '');
+    } else $('clima').textContent = 'Sin datos';
+
+    var near = null, dk = null;
+    if(st.stations){
+      near = L.nearest(st.stations, st.origin.lat, st.origin.lon, 3);
+      dk = L.nearest(st.stations, d.lat, d.lon, 3);
+      $('bicis').innerHTML = near.map(function(s){ return stRow(s, s.bicis, 'bicis'); }).join('');
+      var best = dk.slice().sort(function(a,b){ return b.libres - a.libres; })[0];
+      $('docks').innerHTML = dk.map(function(s){ return stRow(s, s.libres, 'libres'); }).join('');
+      var oneKm = L.haversine(st.origin.lat, st.origin.lon, d.lat, d.lon);
+      $('bikeEta').textContent = 'Distancia ~' + (oneKm/1000).toFixed(1) + ' km en línea recta · ~' + L.bikeMin(oneKm) + ' min en bici';
+    } else { $('bicis').textContent = 'Sin datos de BiciMAD'; $('docks').textContent = ''; $('bikeEta').textContent = ''; }
+
+    var direct = document.querySelector('input[name=direct]:checked').value;
+    direct = direct === '' ? null : direct === '1';
+    $('waitBox').hidden = direct !== true;
+    var metroIssue = document.querySelector('input[name=metro]:checked').value === '1';
+
+    if(rain == null || !near){
+      $('verdict').dataset.mode = '';
+      $('vMode').textContent = '—';
+      $('vWhy').textContent = 'Faltan datos de ' + (rain == null ? 'clima' : 'BiciMAD') + '. Mira el metro como opción segura.';
+      $('vB').textContent = '';
+    } else {
+      var r = L.evaluate({
+        rain: rain,
+        bikes: near.map(function(s){ return s.bicis; }),
+        names: near.map(function(s){ return s.nombre; }),
+        docks: Math.max.apply(null, dk.map(function(s){ return s.libres; })),
+        direct: direct, wait: direct ? (+$('wait').value || 0) : null, metroIssue: metroIssue
+      });
+      var names = { bici:'BiciMAD', bus:'Bus EMT', metro:'Metro' };
+      $('verdict').dataset.mode = r.mode;
+      $('vMode').textContent = names[r.mode];
+      $('vWhy').textContent = r.why;
+      $('vB').textContent = r.planB ? 'Plan B: ' + names[r.planB] : '';
+    }
+    $('fresh').textContent = st.at ? 'Datos de las ' + st.at.toTimeString().slice(0,5) + (st.origin.gps ? ' · con tu GPS' : '') : '';
+  }
+
+  /* destinos */
+  $('dest').addEventListener('change', function(){ st.sel = +this.value; save('sel', st.sel); refresh(false); });
+  $('btnAdd').addEventListener('click', function(){ $('addBox').hidden = !$('addBox').hidden; if(!$('addBox').hidden) $('addQ').focus(); });
+  function addGo(){
+    var q = $('addQ').value.trim(); if(!q) return;
+    $('addMsg').textContent = 'Buscando…';
+    getJson('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=es&viewbox=-3.9,40.65,-3.5,40.3&bounded=1&q='+encodeURIComponent(q.indexOf('Madrid')<0 ? q+', Madrid' : q))
+      .then(function(j){
+        if(!j.length){ $('addMsg').textContent = 'No lo encuentro en Madrid. Prueba con calle y número.'; return; }
+        var p = j[0];
+        st.dests.push({ name:q, lat:+p.lat, lon:+p.lon }); st.sel = st.dests.length-1;
+        save('dests', st.dests); save('sel', st.sel);
+        $('addQ').value=''; $('addMsg').textContent=''; $('addBox').hidden = true;
+        renderDests(); refresh(false);
+      }).catch(function(){ $('addMsg').textContent = 'No se pudo buscar ahora.'; });
+  }
+  $('addGo').addEventListener('click', addGo);
+  $('addQ').addEventListener('keydown', function(e){ if(e.key==='Enter') addGo(); });
+
+  $('btnGps').addEventListener('click', function(){ refresh(true); });
+  $('btnRefresh').addEventListener('click', function(){ refresh(true); });
+  document.querySelectorAll('input[name=direct],input[name=metro],#wait').forEach(function(el){ el.addEventListener('input', render); el.addEventListener('change', render); });
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden && (!st.at || Date.now() - st.at.getTime() > 120000)) refresh(true);
+  });
+
+  renderDests(); renderOrigin(); refresh(true);
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
+})();
+</script>
+</body>
+</html>
