@@ -189,13 +189,20 @@ details summary{cursor:pointer;font-weight:600;min-height:32px}
     });
   }
 
+  var geoWhy = '';
   function locate(){
+    geoWhy = '';
     return new Promise(function(res){
-      if(!navigator.geolocation){ res(false); return; }
-      navigator.geolocation.getCurrentPosition(function(p){
-        st.origin = { name:'Tu ubicación', lat:p.coords.latitude, lon:p.coords.longitude, gps:true };
-        res(true);
-      }, function(){ res(false); }, { enableHighAccuracy:true, timeout:10000, maximumAge:30000 });
+      if(!navigator.geolocation){ geoWhy = 'Este navegador no ofrece ubicación.'; res(false); return; }
+      function ok(p){ st.origin = { name:'Tu ubicación', lat:p.coords.latitude, lon:p.coords.longitude, gps:true }; res(true); }
+      function why(e){
+        geoWhy = e.code === 1 ? 'Permiso de ubicación denegado.' : e.code === 2 ? 'El iPhone no consigue tu posición (¿Servicios de localización desactivados?).' : 'La ubicación tardó demasiado.';
+        res(false);
+      }
+      navigator.geolocation.getCurrentPosition(ok, function(e){
+        if(e.code === 3 || e.code === 2) navigator.geolocation.getCurrentPosition(ok, why, { enableHighAccuracy:false, timeout:20000, maximumAge:600000 });
+        else why(e);
+      }, { enableHighAccuracy:false, timeout:15000, maximumAge:120000 });
     });
   }
 
@@ -203,7 +210,7 @@ details summary{cursor:pointer;font-weight:600;min-height:32px}
     $('btnRefresh').disabled = true; $('btnRefresh').textContent = 'Leyendo…'; $('err').textContent = '';
     var go = useGps ? locate() : Promise.resolve(true);
     return go.then(function(ok){
-      if(useGps && !ok && !st.origin.gps) $('err').textContent = 'No pude obtener tu GPS. Uso Viriato, 71.';
+      if(useGps && !ok && !st.origin.gps) $('err').textContent = (geoWhy || 'No pude obtener tu GPS.') + ' Uso Viriato, 71.';
       renderOrigin();
       var d = dest();
       var wUrl = 'https://api.open-meteo.com/v1/forecast?latitude='+st.origin.lat+'&longitude='+st.origin.lon+
